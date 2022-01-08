@@ -57,6 +57,20 @@ maybe_build_using_clangw(openssl-common)
 # Add the dependency to the opensslconf.h.
 add_enclave_dependencies(openssl-support openssl_generated)
 
+# Use standard OpenSSL by default
+set(CRYPTO_LIB "OpenSSL")
+
+if (ENABLE_SYMCRYPT_OPENSSL_TESTS)
+  # Update the variable to enable the SymCrypt engine
+  set(CRYPTO_LIB "SymCrypt_FIPS")
+
+  # Make sure the symcrypt module is placed under the same directory as enclave
+  # binaries
+  configure_file(
+    ${CMAKE_BINARY_DIR}/3rdparty/symcrypt_engine/SymCrypt/lib/libsymcrypt.so
+    libsymcrypt.so COPYONLY)
+endif ()
+
 # List the tests that require ssltestlib.c.
 set(SSL_TEST_LIST
     "asynciotest"
@@ -111,7 +125,7 @@ function (add_openssl_test_enc NAME BUILDTEST)
     # test linking against LVI-mitigated libraries.
     ADD_LVI_MITIGATION
     CRYPTO_LIB
-    OpenSSL
+    ${CRYPTO_LIB}
     SOURCES
     ${TEST_SRC})
 
@@ -150,6 +164,18 @@ function (add_openssl_test_enc NAME BUILDTEST)
 
   enclave_link_libraries(openssl-${NAME}_enc openssl-support openssl-common
                          oehostsock oehostfs oehostresolver)
+
+  if (ENABLE_SYMCRYPT_OPENSSL_TESTS)
+    # Propagate CMAKE_SKIP_RPATH variable.
+    set(CMAKE_SKIP_RPATH
+        "${CMAKE_SKIP_RPATH}"
+        PARENT_SCOPE)
+
+    # Link against the symcrypt module
+    enclave_link_libraries(
+      openssl-${NAME}_enc
+      ${CMAKE_BINARY_DIR}/3rdparty/symcrypt_engine/SymCrypt/lib/libsymcrypt.so)
+  endif ()
 
   if (WIN32)
     maybe_build_using_clangw(openssl-${NAME}_enc)
